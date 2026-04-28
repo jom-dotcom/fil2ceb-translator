@@ -1,0 +1,6 @@
+streamlit
+transformers
+torch
+sentencepiece
+huggingface_hub
+sacrebleugit commit -m "initial commit"
