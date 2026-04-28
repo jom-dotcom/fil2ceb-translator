@@ -1,6 +1,6 @@
 streamlit
 transformers
-torch==2.1.0
+torch==2.9.0
 sentencepiece
 huggingface_hub
 sacrebleu
