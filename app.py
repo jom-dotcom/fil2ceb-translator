@@ -1,7 +1,11 @@
-import gradio as gr
+import streamlit as st
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 import sacrebleu
+
+st.set_page_config(page_title="Filipino to Cebuano Translator", page_icon="🇵🇭")
+st.title("🇵🇭 Filipino to Cebuano Translator")
+st.write("Powered by Fine-Tuned NLLB Transformer with MBR Decoding")
 
 MODEL_OPTIONS = {
     "Base NLLB (No Fine-Tuning)": "facebook/nllb-200-distilled-600M",
@@ -9,15 +13,17 @@ MODEL_OPTIONS = {
     "Model B (Back-Translation Augmented)": "Jom-0209/nllb-fil2ceb-modelB",
 }
 
-loaded_models = {}
+selected_label = st.selectbox("Select Model:", list(MODEL_OPTIONS.keys()))
 
+@st.cache_resource
 def load_model(model_name):
-    if model_name not in loaded_models:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
-        loaded_models[model_name] = (tokenizer, model, device)
-    return loaded_models[model_name]
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
+    return tokenizer, model, device
+
+with st.spinner("Loading model... this may take a moment."):
+    tokenizer, model, device = load_model(MODEL_OPTIONS[selected_label])
 
 def get_candidates(text, model, tokenizer, device, num_candidates=5):
     model.eval()
@@ -53,50 +59,21 @@ def mbr_select(candidates):
 
     return best_candidate
 
-def translate(text, model_choice, show_candidates):
-    if not text.strip():
-        return "Please enter some text.", ""
+text = st.text_area("Enter Filipino text:", height=150)
+show_candidates = st.checkbox("Show all MBR candidates")
 
-    model_name = MODEL_OPTIONS[model_choice]
-    tokenizer, model, device = load_model(model_name)
+if st.button("Translate"):
+    if text.strip():
+        with st.spinner("Generating candidates and applying MBR decoding..."):
+            candidates = get_candidates(text, model, tokenizer, device)
+            best = mbr_select(candidates)
 
-    candidates = get_candidates(text, model, tokenizer, device)
-    best = mbr_select(candidates)
+        st.subheader("Cebuano Translation:")
+        st.success(best)
 
-    candidates_text = ""
-    if show_candidates:
-        candidates_text = "\n".join([f"{i+1}. {c}" for i, c in enumerate(candidates)])
-
-    return best, candidates_text
-
-with gr.Blocks(title="Filipino to Cebuano Translator") as demo:
-    gr.Markdown("# 🇵🇭 Filipino to Cebuano Translator")
-    gr.Markdown("Powered by Fine-Tuned NLLB Transformer with MBR Decoding")
-
-    with gr.Row():
-        model_choice = gr.Dropdown(
-            choices=list(MODEL_OPTIONS.keys()),
-            value="Model B (Back-Translation Augmented)",
-            label="Select Model"
-        )
-
-    text_input = gr.Textbox(
-        label="Enter Filipino text:",
-        placeholder="Type here...",
-        lines=4
-    )
-
-    show_candidates = gr.Checkbox(label="Show all MBR candidates")
-
-    translate_btn = gr.Button("Translate", variant="primary")
-
-    translation_output = gr.Textbox(label="Cebuano Translation:")
-    candidates_output = gr.Textbox(label="All Candidates:", visible=True)
-
-    translate_btn.click(
-        fn=translate,
-        inputs=[text_input, model_choice, show_candidates],
-        outputs=[translation_output, candidates_output]
-    )
-
-demo.launch()
+        if show_candidates:
+            st.subheader("All Candidates:")
+            for i, c in enumerate(candidates):
+                st.write(f"{i+1}. {c}")
+    else:
+        st.warning("Please enter some text.")
